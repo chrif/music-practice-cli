@@ -1,3 +1,7 @@
 # Created by .ignore support plugin (hsz.mobi)
 /.idea/
 /composer.phar
+/notes.txt
+/vendor/
+/client_secret.json
+/credentials.json

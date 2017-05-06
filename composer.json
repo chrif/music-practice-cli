@@ -1,4 +1,7 @@
 {
   "name": "chrif/music-practice-desktop",
-  "description": "Desktop app to call API"
+  "description": "Desktop app to call API",
+  "require": {
+    "google/apiclient": "^2.0"
+  }
 }
