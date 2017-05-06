@@ -74,6 +74,11 @@ $scriptId = 'Mymnztob-F5LmcHT0BqHVqyZNcORKOCcz';
 $request = new Google_Service_Script_ExecutionRequest();
 $request->setFunction($argv[1]);
 $request->setDevMode(true);
+if (isset($argv[2])) {
+	$request->setParameters([
+		'score' => $argv[2]
+	]);
+}
 
 try {
 	// Make the API request.
