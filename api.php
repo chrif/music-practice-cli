@@ -5,24 +5,66 @@ if (php_sapi_name() != 'cli') {
 	throw new Exception('This application must be run on the command line.');
 }
 
+try {
+	$client = createClient();
+
+	$service = new Google_Service_Script($client);
+
+	$function = $argv[1];
+	$score = isset($argv[2]) ? $argv[2] : null;
+	$request = createRequest($function, $score);
+
+	$operation = $service->scripts->run('Mymnztob-F5LmcHT0BqHVqyZNcORKOCcz', $request);
+
+	echo formatApiResponse($operation);
+
+} catch (Exception $e) {
+	// The API encountered a problem before the script started executing.
+	echo 'Caught exception: ', $e->getMessage(), "\n";
+}
+
 /**
  * Returns an authorized API client.
  * @return Google_Client the authorized client object
+ * @throws Exception
  */
-function getClient() {
+function createClient() {
+	$client = authenticateAClient();
+	$attempts = 1;
+
+	while(!$client && $attempts < 5) {
+		$client = authenticateAClient();
+		$attempts++;
+	}
+
+	if (!$client) {
+		throw new Exception('Could not authorize client after 5 attempts');
+	}
+
+	return $client;
+}
+
+/**
+ * @return Google_Client|null
+ */
+function authenticateAClient() {
 	$client = new Google_Client();
 	$client->setApplicationName('MusicPractice');
-	$client->setScopes(array(
-			"https://www.googleapis.com/auth/spreadsheets")
-	);
+	$client->setScopes(["https://www.googleapis.com/auth/spreadsheets"]);
 	$client->setAuthConfig(__DIR__ . '/client_secret.json');
+
+	// https://developers.google.com/identity/protocols/OAuth2WebServer#offline
 	$client->setAccessType('offline');
 
 	// Load previously authorized credentials from a file.
 	$credentialsPath = __DIR__ . '/credentials.json';
+
 	if (file_exists($credentialsPath)) {
+
 		$accessToken = json_decode(file_get_contents($credentialsPath), true);
+
 	} else {
+
 		// Request authorization from the user.
 		$authUrl = $client->createAuthUrl();
 		printf("Open the following link in your browser:\n%s\n", $authUrl);
@@ -36,6 +78,7 @@ function getClient() {
 		if (!file_exists(dirname($credentialsPath))) {
 			mkdir(dirname($credentialsPath), 0700, true);
 		}
+
 		file_put_contents($credentialsPath, json_encode($accessToken));
 		printf("Credentials saved to %s\n", $credentialsPath);
 	}
@@ -45,7 +88,7 @@ function getClient() {
 	} catch (InvalidArgumentException $e) {
 		unlink($credentialsPath);
 
-		return getClient();
+		return null;
 	}
 
 	try {
@@ -54,60 +97,56 @@ function getClient() {
 		if ('refresh token must be passed in or set as part of setAccessToken' == $e->getMessage()) {
 			unlink($credentialsPath);
 
-			return getClient();
+			return null;
 		}
 	}
+
 	file_put_contents($credentialsPath, json_encode($client->getAccessToken()));
 
 	return $client;
 }
 
-// Get the API client and construct the service object.
-$client = getClient();
-$service = new Google_Service_Script($client);
+/**
+ * @param string $function API method
+ * @param string|null $score
+ * @return Google_Service_Script_ExecutionRequest
+ */
+function createRequest($function, $score = null) {
+	$request = new Google_Service_Script_ExecutionRequest();
+	$request->setFunction($function);
+	$request->setDevMode(true);
+	if (isset($score)) {
+		$request->setParameters([
+			'score' => $score
+		]);
+	}
 
-$scriptId = 'Mymnztob-F5LmcHT0BqHVqyZNcORKOCcz';
-
-// Create an execution request object.
-$request = new Google_Service_Script_ExecutionRequest();
-$request->setFunction($argv[1]);
-$request->setDevMode(true);
-if (isset($argv[2])) {
-	$request->setParameters([
-		'score' => $argv[2]
-	]);
+	return $request;
 }
 
-try {
-	// Make the API request.
-	$response = $service->scripts->run($scriptId, $request);
+function formatApiResponse(Google_Service_Script_Operation $operation) {
+	$out = "";
 
-	if ($response->getError()) {
-		// The API executed, but the script returned an error.
-
+	if ($operation->getError()) {
 		// Extract the first (and only) set of error details. The values of this
 		// object are the script's 'errorMessage' and 'errorType', and an array of
 		// stack trace elements.
-		$error = $response->getError()['details'][0];
-		printf("Script error message: %s\n", $error['errorMessage']);
+		$error = $operation->getError()['details'][0];
+		$out .= sprintf("Script error message: %s\n", $error['errorMessage']);
 
 		if (array_key_exists('scriptStackTraceElements', $error)) {
 			// There may not be a stacktrace if the script didn't start executing.
-			print "Script error stacktrace:\n";
+			$out .= "Script error stacktrace:\n";
 			foreach ($error['scriptStackTraceElements'] as $trace) {
-				printf("\t%s: %d\n", $trace['function'], $trace['lineNumber']);
+				$out .= sprintf("\t%s: %d\n", $trace['function'], $trace['lineNumber']);
 			}
 		}
 	} else {
-		// The structure of the result will depend upon what the Apps Script
-		// function returns. Here, the function returns an Apps Script Object
-		// with String keys and values, and so the result is treated as a
-		// PHP array (folderSet).
-		$resp = $response->getResponse();
+		// The structure of the result depends upon what the Apps Script returns
+		$resp = $operation->getResponse();
 		$result = $resp['result'];
-		echo json_encode($result, JSON_PRETTY_PRINT) . PHP_EOL;
+		$out .= json_encode($result, JSON_PRETTY_PRINT) . PHP_EOL;
 	}
-} catch (Exception $e) {
-	// The API encountered a problem before the script started executing.
-	echo 'Caught exception: ', $e->getMessage(), "\n";
+
+	return $out;
 }
