@@ -19,7 +19,7 @@ function getClient() {
 	$client->setAccessType('offline');
 
 	// Load previously authorized credentials from a file.
-	$credentialsPath =  __DIR__ . '/credentials.json';
+	$credentialsPath = __DIR__ . '/credentials.json';
 	if (file_exists($credentialsPath)) {
 		$accessToken = json_decode(file_get_contents($credentialsPath), true);
 	} else {
@@ -39,6 +39,7 @@ function getClient() {
 		file_put_contents($credentialsPath, json_encode($accessToken));
 		printf("Credentials saved to %s\n", $credentialsPath);
 	}
+
 	try {
 		$client->setAccessToken($accessToken);
 	} catch (InvalidArgumentException $e) {
@@ -47,19 +48,16 @@ function getClient() {
 		return getClient();
 	}
 
-	// Refresh the token if it's expired.
-	if ($client->isAccessTokenExpired()) {
-		try {
-			$client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
-		} catch (LogicException $e) {
-			if ('refresh token must be passed in or set as part of setAccessToken' == $e->getMessage()) {
-				unlink($credentialsPath);
+	try {
+		$client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
+	} catch (LogicException $e) {
+		if ('refresh token must be passed in or set as part of setAccessToken' == $e->getMessage()) {
+			unlink($credentialsPath);
 
-				return getClient();
-			}
+			return getClient();
 		}
-		file_put_contents($credentialsPath, json_encode($client->getAccessToken()));
 	}
+	file_put_contents($credentialsPath, json_encode($client->getAccessToken()));
 
 	return $client;
 }
