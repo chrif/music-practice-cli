@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/vendor/autoload.php';
 
-
 if (php_sapi_name() != 'cli') {
 	throw new Exception('This application must be run on the command line.');
 }
@@ -12,7 +11,7 @@ if (php_sapi_name() != 'cli') {
  */
 function getClient() {
 	$client = new Google_Client();
-	$client->setApplicationName('Desktop PHP');
+	$client->setApplicationName('MusicPractice');
 	$client->setScopes(array(
 			"https://www.googleapis.com/auth/spreadsheets")
 	);
@@ -34,19 +33,34 @@ function getClient() {
 		$accessToken = $client->fetchAccessTokenWithAuthCode($authCode);
 
 		// Store the credentials to disk.
-		if(!file_exists(dirname($credentialsPath))) {
+		if (!file_exists(dirname($credentialsPath))) {
 			mkdir(dirname($credentialsPath), 0700, true);
 		}
 		file_put_contents($credentialsPath, json_encode($accessToken));
 		printf("Credentials saved to %s\n", $credentialsPath);
 	}
-	$client->setAccessToken($accessToken);
+	try {
+		$client->setAccessToken($accessToken);
+	} catch (InvalidArgumentException $e) {
+		unlink($credentialsPath);
+
+		return getClient();
+	}
 
 	// Refresh the token if it's expired.
 	if ($client->isAccessTokenExpired()) {
-		$client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
+		try {
+			$client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
+		} catch (LogicException $e) {
+			if ('refresh token must be passed in or set as part of setAccessToken' == $e->getMessage()) {
+				unlink($credentialsPath);
+
+				return getClient();
+			}
+		}
 		file_put_contents($credentialsPath, json_encode($client->getAccessToken()));
 	}
+
 	return $client;
 }
 
@@ -54,11 +68,12 @@ function getClient() {
 $client = getClient();
 $service = new Google_Service_Script($client);
 
-$scriptId = "Mymnztob-F5LmcHT0BqHVqyZNcORKOCcz";
+$scriptId = 'Mymnztob-F5LmcHT0BqHVqyZNcORKOCcz';
 
 // Create an execution request object.
 $request = new Google_Service_Script_ExecutionRequest();
-$request->setFunction('scores');
+$request->setFunction($argv[1]);
+$request->setDevMode(true);
 
 try {
 	// Make the API request.
@@ -76,7 +91,7 @@ try {
 		if (array_key_exists('scriptStackTraceElements', $error)) {
 			// There may not be a stacktrace if the script didn't start executing.
 			print "Script error stacktrace:\n";
-			foreach($error['scriptStackTraceElements'] as $trace) {
+			foreach ($error['scriptStackTraceElements'] as $trace) {
 				printf("\t%s: %d\n", $trace['function'], $trace['lineNumber']);
 			}
 		}
@@ -86,7 +101,8 @@ try {
 		// with String keys and values, and so the result is treated as a
 		// PHP array (folderSet).
 		$resp = $response->getResponse();
-		var_export($resp);
+		$result = $resp['result'];
+		echo json_encode($result, JSON_PRETTY_PRINT) . PHP_EOL;
 	}
 } catch (Exception $e) {
 	// The API encountered a problem before the script started executing.
