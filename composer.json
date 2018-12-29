@@ -3,6 +3,7 @@
   "description": "Cli command to call API",
   "require": {
     "php": ">=7.1",
-    "google/apiclient": "^2.0"
+    "google/apiclient": "^2.0",
+    "ext-json": "*"
   }
 }
